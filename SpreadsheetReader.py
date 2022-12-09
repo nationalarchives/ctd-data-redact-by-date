@@ -58,7 +58,7 @@ def sheetRedactionNeededCheck(openingList):
 
 def redactColumns(columnsToRedact, openingList, lastYearInSeries, year=date.today().year):
     ''' 
-    col1 & col2 -> {"base": [col1, col2], year: [col1_redacted, col2_redacted], year+1 [col1_opening, col2_opening]... max_year: [col1_openning, col2_opening]}
+    col1 & col2 -> {"base": [{col1Name:col1, col2Name:col2}], year: [{col1Name: col1_redacted, col2Name: col2_redacted], year+1 [{col1Name: col1_redacted, col2Name: col2_redacted]... max_year: [{col1Name: col1_redacted, col2Name: col2_redacted]}
     '''
     boilerplate = "[Additional information regarding this case will be added to the catalogue when the case becomes over 100 years old. In cases when the date is not known, the latest date in the series (" + str(lastYearInSeries) + ") will be used]"
     
@@ -66,19 +66,18 @@ def redactColumns(columnsToRedact, openingList, lastYearInSeries, year=date.toda
     
     yearsToPublish = list(range(year, max(openingList)+1))
     
-    redactedColumnsByYear = {}
-    
     for currentYear in yearsToPublish:
-        print(currentYear)
+        #print(currentYear)
         
         toRedact = [True if currentYear < openingYear else False for openingYear in openingList]
         test_redactByYear_testFile(toRedact, currentYear)
-        redactedColumnsByYear[currentYear] = {}
+        processedColumns[currentYear] = {}
     
         for columnName, column in columnsToRedact.items():
             newColumn = [boilerplate if record[1] else record[0] for record in zip(column, toRedact)]   
-            redactedColumnsByYear[currentYear][columnName]=newColumn
-            
+            processedColumns[currentYear][columnName]=newColumn
+    
+    return processedColumns
         
 
 
@@ -144,4 +143,4 @@ test_openingList_testFile(openingList)
 
 if(sheetRedactionNeededCheck(openingList)):
     newColumns = redactColumns(dict((key, currentSpreadsheet[key]) for key in ['Occupation', 'Brief summary of grounds for recommendation']), openingList, 1945)
-    print(newColumns)
+    pp(newColumns)
