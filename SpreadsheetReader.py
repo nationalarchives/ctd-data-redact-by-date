@@ -1,6 +1,6 @@
 # Function to read data from spreadsheet
 
-import os
+import os, re
 from pprintpp import pprint as pp
 from openpyxl import load_workbook
 
@@ -31,8 +31,10 @@ def getAgeFromColumn(column):
 def getYearFromColumn(column):
     ''' Get year from named column and return a list of years'''
     # regex for dddd in text value
-    pass
-    
+    # since Python 3.8 := allows you to name an evaluation as a variable which you can use int he list comparhension see https://stackoverflow.com/questions/26672532/how-to-set-local-variable-in-list-comprehension
+    years = [int(years[0]) if len((years := re.findall(r'\d{4}', entry))) == 1 else years for entry in column] 
+    #pp(years)
+    return years
 
 def createCoveringDateField(sheet, dateList):
     ''' print out a new spreadsheet with an extra column listing the covering date as specified by the dateList '''
@@ -64,8 +66,12 @@ def test_age_T336_002(ageList):
     expectedAges = [18,18,18,18,18,18,18,18,18,18,18,18,18,18,18,18,18,18,18,36,18,18,18,18,18,18,18,18,18,18,18,18,18,18,18,18,18,18]   
     assert expectedAges == ageList
 
-def test_year():
-    pass   
+def test_year(yearList):
+    assert all(isinstance(x, int) for x in ageList)
+
+def test_year_T336_002(yearList):
+    expectedYears = [1940,1940,1940,1940,1940,1940,1940,1940,1940,1940,1940,1940,1940,1940,1940,1940,1940,1940,1940,1940,1940,1940,1940,1940,1940,1940,1940,1940,1940,1940,1940,1940,1940,1940,1940,1940,1940,1940]    
+    assert expectedYears == yearList
 
 def test_dateList():
     pass
@@ -80,6 +86,11 @@ def test_redacted():
 
 current_spreadsheet = getSpreadsheetValues('T 336_002.xlsx')
 test_loadfile(list(current_spreadsheet.keys()))
+
 ageList = getAgeFromColumn(current_spreadsheet['Age'])
 test_age(ageList)
 test_age_T336_002(ageList)
+
+ageList = getYearFromColumn(current_spreadsheet['Brief summary of grounds for recommendation'])
+test_year(ageList)
+test_year_T336_002(ageList)
