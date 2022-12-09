@@ -54,32 +54,30 @@ def createOpeningList(ages, years):
 
 def sheetRedactionNeededCheck(openingList):
     return False if max(openingList) <= date.today().year else True
-
-def getValue(recordText, openingList, year, lastYearInSeries):
-    boilerplate = "[Additional information regarding this case will be added to the catalogue when the case becomes over 100 years old. In cases when the date is not known, the latest date in the series (" + str(lastYearInSeries) + ") will be used]"
-    return boilerplate if openingList <= year else recordText
     
 
 def redactColumns(columnsToRedact, openingList, lastYearInSeries, year=date.today().year):
     ''' 
     col1 & col2 -> {"base": [col1, col2], year: [col1_redacted, col2_redacted], year+1 [col1_opening, col2_opening]... max_year: [col1_openning, col2_opening]}
     '''
-    processedColumns = {"base":columnsToRedact}
+    boilerplate = "[Additional information regarding this case will be added to the catalogue when the case becomes over 100 years old. In cases when the date is not known, the latest date in the series (" + str(lastYearInSeries) + ") will be used]"
     
+    processedColumns = {"base":columnsToRedact}
     
     yearsToPublish = list(range(year, max(openingList)+1))
     
-    redactByYear = {}
-    
-    print(openingList)
+    redactedColumnsByYear = {}
     
     for currentYear in yearsToPublish:
+        print(currentYear)
+        
         toRedact = [True if currentYear < openingYear else False for openingYear in openingList]
         test_redactByYear_testFile(toRedact, currentYear)
-        redactByYear[currentYear] = toRedact
+        redactedColumnsByYear[currentYear] = {}
     
-    for column_name, column in columnsToRedact.items():
-        pass
+        for columnName, column in columnsToRedact.items():
+            newColumn = [boilerplate if record[1] else record[0] for record in zip(column, toRedact)]   
+            redactedColumnsByYear[currentYear][columnName]=newColumn
             
         
 
@@ -125,7 +123,9 @@ def test_redactByYear_testFile(toRedactList, year):
     else:
         expectedRedactionList = [False,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False]
         assert expectedRedactionList == toRedactList
-        
+
+
+### Main        
 
 currentSpreadsheet = getSpreadsheetValues('test.xlsx')
 test_loadfile(list(currentSpreadsheet.keys()))
