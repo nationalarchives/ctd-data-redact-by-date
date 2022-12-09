@@ -10,19 +10,15 @@ def getSpreadsheetValues(filename):
     wb = load_workbook(filename = path)
     
     sheet = wb.worksheets[0]
-    columnList = [cell.value for cell in sheet[1] if cell.value is not None]
-    
-    values = {cell.value: ''  for cell in sheet[1] if cell.value is not None}
+    values={}
     
     for col in sheet.columns:
-        column = [cell.value for cell in col if cell.value is not None] 
+        column = [cell.value for cell in col if cell.value is not None]
         
         if len(column) > 0:
             values[column[0]] = column[1:]
     
-    #pp(values)
-    
-    return (values, columnList)
+    return (values)
         
 
 
@@ -78,4 +74,4 @@ def test_redacted():
     pass
         
 
-test_loadfile(getSpreadsheetValues('T 336_002.xlsx')[1])
+test_loadfile(list(getSpreadsheetValues('T 336_002.xlsx').keys()))
