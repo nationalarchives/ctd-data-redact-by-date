@@ -22,18 +22,17 @@ def getSpreadsheetValues(filename):
         
 
 
-def getAgeFromColumn(sheet, columnname):
+def getAgeFromColumn(column):
     ''' Get age from named column, if no age given then assume age is 18, and return a list of ages '''
-    age = 18
-    # if value is number then age otherwise default value
-    
-    return ageList
+    # if value is number then age otherwise default value   
+    return [entry if str(entry).strip().isnumeric() else 18 for entry in column]         
 
-def getYearFromColumn(sheet, columnname):
+
+def getYearFromColumn(column):
     ''' Get year from named column and return a list of years'''
     # regex for dddd in text value
-    
     pass
+    
 
 def createCoveringDateField(sheet, dateList):
     ''' print out a new spreadsheet with an extra column listing the covering date as specified by the dateList '''
@@ -52,14 +51,18 @@ def unredactColumns(sheet, year):
 ### Tests ####
 
 
-def test_loadfile(column_headings):
-    expected_columns = ['Letter','Series','Piece', 'Item', 'Treasury Case number', 'Home Office case number', 'First names/Initials', 'Surname', 'Age', 'Occupation', 'Award granted', 'Brief summary of grounds for recommendation']
+def test_loadfile(columnHeadings):
+    expectedColumns = ['Letter','Series','Piece', 'Item', 'Treasury Case number', 'Home Office case number', 'First names/Initials', 'Surname', 'Age', 'Occupation', 'Award granted', 'Brief summary of grounds for recommendation']
     
-    assert column_headings == expected_columns  
+    assert columnHeadings == expectedColumns  
     
     
-def test_age():
-    pass
+def test_age(ageList):
+    assert all(isinstance(x, int) for x in ageList)
+    
+def test_age_T336_002(ageList):
+    expectedAges = [18,18,18,18,18,18,18,18,18,18,18,18,18,18,18,18,18,18,18,36,18,18,18,18,18,18,18,18,18,18,18,18,18,18,18,18,18,18]   
+    assert expectedAges == ageList
 
 def test_year():
     pass   
@@ -74,4 +77,9 @@ def test_redacted():
     pass
         
 
-test_loadfile(list(getSpreadsheetValues('T 336_002.xlsx').keys()))
+
+current_spreadsheet = getSpreadsheetValues('T 336_002.xlsx')
+test_loadfile(list(current_spreadsheet.keys()))
+ageList = getAgeFromColumn(current_spreadsheet['Age'])
+test_age(ageList)
+test_age_T336_002(ageList)
