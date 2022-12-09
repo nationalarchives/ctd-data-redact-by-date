@@ -20,13 +20,14 @@ def getSpreadsheetValues(filename):
             values[column[0]] = column[1:]
     
     return (values)
-        
+       
 
 
 def getAgeFromColumn(column):
     ''' Get age from named column, if no age given then assume age is 18, and return a list of ages '''
     # if value is number then age otherwise default value   
     return [entry if str(entry).strip().isnumeric() else 18 for entry in column]         
+
 
 def getYearFromColumn(column):
     ''' Get year from named column and return a list of years'''
@@ -51,8 +52,12 @@ def createOpeningList(ages, years):
     return list(map(openingCalculation, ages, years))
 
 
-def redactionNeededCheck(openingList):
+def sheetRedactionNeededCheck(openingList):
     return False if max(openingList) <= date.today().year else True
+
+def getValue(recordText, openingList, year, lastYearInSeries):
+    boilerplate = "[Additional information regarding this case will be added to the catalogue when the case becomes over 100 years old. In cases when the date is not known, the latest date in the series (" + str(lastYearInSeries) + ") will be used]"
+    return boilerplate if openingList <= year else recordText
     
 
 def redactColumns(columnsToRedact, openingList, lastYearInSeries, year=date.today().year):
@@ -61,10 +66,21 @@ def redactColumns(columnsToRedact, openingList, lastYearInSeries, year=date.toda
     '''
     processedColumns = {"base":columnsToRedact}
     
-    boilerplate = "[Additional information regarding this case will be added to the catalogue when the case becomes over 100 years old. In cases when the date is not known, the latest date in the series (" + lastYearInSeries + ") will be used]"
+    
+    yearsToPublish = list(range(year, max(openingList)+1))
+    
+    redactByYear = {}
+    
+    print(openingList)
+    
+    for currentYear in yearsToPublish:
+        toRedact = [True if currentYear < openingYear else False for openingYear in openingList]
+        test_redactByYear_testFile(toRedact, currentYear)
+        redactByYear[currentYear] = toRedact
     
     for column_name, column in columnsToRedact.items():
         pass
+            
         
 
 
@@ -93,19 +109,32 @@ def test_year_testFile(yearList):
     assert expectedYears == yearList
 
 def test_openingList_testFile(openingList):
-    expectedOpening = [2020,2020,2020,2020,2020,2000,2021,2021,2021,2022,2022,2022,2022,2022,2023,2023,2024,2024,2024,2004,2025,2025,2025,2014,2018,2019]  
+    expectedOpening = [2020,2020,2020,2020,2020,2000,2021,2021,2021,2022,2022,2022,2022,2022,2023,2023,2024,2024,2024,2004,2025,2025,2025,2014,2018,2019]    
+    assert expectedOpening == openingList 
 
+def test_redactByYear_testFile(toRedactList, year):    
+    if year == 2022:
+        expectedRedactionList = [False,False,False,False,False,False,False,False,False,False,False,False,False,False,True,True,True,True,True,False,True,True,True,False,False,False]
+        assert expectedRedactionList == toRedactList
+    elif year == 2023:
+        expectedRedactionList = [False,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False,True,True,True,False,True,True,True,False,False,False]
+        assert expectedRedactionList == toRedactList
+    elif year == 2024:
+        expectedRedactionList = [False,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False,True,True,True,False,False,False]
+        assert expectedRedactionList == toRedactList
+    else:
+        expectedRedactionList = [False,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False]
+        assert expectedRedactionList == toRedactList
         
 
+currentSpreadsheet = getSpreadsheetValues('test.xlsx')
+test_loadfile(list(currentSpreadsheet.keys()))
 
-current_spreadsheet = getSpreadsheetValues('T 336_002.xlsx')
-test_loadfile(list(current_spreadsheet.keys()))
-
-ageList = getAgeFromColumn(current_spreadsheet['Age'])
+ageList = getAgeFromColumn(currentSpreadsheet['Age'])
 test_all_ints(ageList)
 test_age_testFile(ageList)
 
-yearList = getYearFromColumn(current_spreadsheet['Brief summary of grounds for recommendation'])
+yearList = getYearFromColumn(currentSpreadsheet['Brief summary of grounds for recommendation'])
 test_all_ints(yearList)
 test_year_testFile(yearList)
 
@@ -113,4 +142,6 @@ openingList = createOpeningList(ageList, yearList)
 test_all_ints(openingList)
 test_openingList_testFile(openingList)
 
-print(redactionNeededCheck(openingList))
+if(sheetRedactionNeededCheck(openingList)):
+    newColumns = redactColumns(dict((key, currentSpreadsheet[key]) for key in ['Occupation', 'Brief summary of grounds for recommendation']), openingList, 1945)
+    print(newColumns)
