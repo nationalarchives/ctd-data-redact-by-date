@@ -2,7 +2,8 @@
 
 import os, re
 from pprintpp import pprint as pp
-from openpyxl import load_workbook
+from openpyxl import Workbook, load_workbook
+from openpyxl.styles import Font
 from datetime import date
 
 def getSpreadsheetValues(filename):
@@ -38,10 +39,10 @@ def getYearFromColumn(column):
     return years
 
 
-def createCoveringDateField(sheet, dateList):
-    ''' print out a new spreadsheet with an extra column listing the covering date as specified by the dateList '''
-    # openpyxl.worksheet.worksheet.Worksheet.insert_cols()
-    pass
+def insertCoveringDateValues(sheet, dateList):
+    ''' Insert covering date values into dictionary of spreadsheet values '''
+    sheet["Covering Dates"] = dateList
+    return sheet
 
 
 def openingCalculation(age, year):
@@ -81,9 +82,40 @@ def redactColumns(columnsToRedact, openingList, lastYearInSeries, year=date.toda
         
 
 
-def unredactColumns(sheet, year):
+def unredactByYear(filename, values, newValues, year):
     ''' print out a new spreadsheet with the full text for all columns for just the rows where the year is 100 years since birth'''
-    pass
+    
+    wb = Workbook()
+    newFilename = str(year) + "_" + filename
+    path = os.path.join('data/converted/' + str(year), newFilename) 
+    
+    newSheet = wb.active
+    
+    y = 1
+    
+    #print(newValues[year].keys())
+    
+    for title, row in values.items():
+        newSheet.cell(1, y, title).font = Font(bold=True)
+    
+        x = 2
+        
+        if title in newValues[year].keys():
+            row = newValues[year][title]
+           
+
+        while x < (len(row) + 2):
+            newSheet.cell(x, y, row[x - 2])
+            x+=1
+            
+        y+=1
+        
+    
+    #newSheet.insert_cols(11)
+    #newSheet.cell(1, 11, "Covering Dates")    
+        
+    
+    wb.save(path)
 
 
 ### Tests ####
@@ -137,10 +169,14 @@ yearList = getYearFromColumn(currentSpreadsheet['Brief summary of grounds for re
 test_all_ints(yearList)
 test_year_testFile(yearList)
 
+insertCoveringDateValues(currentSpreadsheet, yearList)
+
 openingList = createOpeningList(ageList, yearList)
 test_all_ints(openingList)
 test_openingList_testFile(openingList)
 
 if(sheetRedactionNeededCheck(openingList)):
     newColumns = redactColumns(dict((key, currentSpreadsheet[key]) for key in ['Occupation', 'Brief summary of grounds for recommendation']), openingList, 1945)
-    pp(newColumns)
+    #pp(newColumns)
+    
+unredactByYear("test.xlsx", currentSpreadsheet, newColumns, 2022)
