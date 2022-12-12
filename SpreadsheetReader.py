@@ -60,19 +60,19 @@ def sheetRedactionNeededCheck(openingList):
     return False if max(openingList) <= date.today().year else True
 
         
-def filterByYear(previousRedactionList, currentRedactionList):
+def selectByYear(previousRedactionList, currentRedactionList):
     ''' Return filter of changed redaction'''    
-    return [True if a == b else False for a, b in zip(previousRedactionList, currentRedactionList)]    
+    return [False if a == b else True for a, b in zip(previousRedactionList, currentRedactionList)]    
 
 
-def redactColumns(columnsToRedact, openingList, lastYearInSeries, year=date.today().year):
+def redactColumns(columnsToRedact, openingList, lastYearInSeries, year=date.today().year, minimum=True):
     ''' given a dictionary containung the columns that may need redacting, return a dict containing the original record values and
     the processed values for each year, by year, until all records have been opened. 
     
     {"base": [{col1Name:col1, col2Name:col2}], 
-    year: [{col1Name: col1_redacted, col2Name: col2_redacted], 
-    year+1 [{col1Name: col1_redacted, col2Name: col2_redacted]... 
-    max_year: [{col1Name: col1_redacted, col2Name: col2_redacted]}
+    year: [{filter: filter, col1Name: col1_redacted, col2Name: col2_redacted], 
+    year+1 [{filter: filter, col1Name: col1_redacted, col2Name: col2_redacted]... 
+    max_year: [{filter: filter, col1Name: col1_redacted, col2Name: col2_redacted]}
     
     '''
     
@@ -95,12 +95,12 @@ def redactColumns(columnsToRedact, openingList, lastYearInSeries, year=date.toda
         if previousRedactions == []:
             previousRedactions = toRedact
         else:
-            filter = filterByYear(previousRedactions, toRedact)
+            filter = selectByYear(previousRedactions, toRedact)
             previousRedactions = toRedact
         
-        test_filterByYear_testFile(filter, currentYear)
+        test_selectByYear_testFile(filter, currentYear)
         
-        processedColumns[currentYear] = {}
+        processedColumns[currentYear] = {"filter": filter}
     
         for columnName, column in columnsToRedact.items():
             newColumn = [boilerplate if record[1] else record[0] for record in zip(column, toRedact)]   
@@ -109,12 +109,12 @@ def redactColumns(columnsToRedact, openingList, lastYearInSeries, year=date.toda
     return processedColumns
 
 
-def unredactByYear(filename, values, newValues, year):
+def unredactByYear(filename, values, newValues, year, min=True):
     ''' print out a new spreadsheet with the full text for all columns for just the rows where the year is 100 years since birth'''
     
     wb = Workbook()
     newFilename = str(year) + "_" + filename
-    pathToFile = os.path.join('data', 'converted' + str(year))
+    pathToFile = os.path.join('data', 'converted',str(year))
     
     if not os.path.exists(pathToFile):
         os.makedirs(pathToFile)
@@ -125,24 +125,35 @@ def unredactByYear(filename, values, newValues, year):
     
     y = 1
     
+    #print(values)
+    
     #print(newValues[year].keys())
     
-    for title, row in values.items():
+    filter = newValues[year]["filter"]
+    
+    for title, column in values.items():
         newSheet.cell(1, y, title).font = Font(bold=True)
     
         x = 2
         
         if title in newValues[year].keys():
-            row = newValues[year][title]
-           
+            column = newValues[year][title]
 
-        while x < (len(row) + 2):
-            newSheet.cell(x, y, row[x - 2])
-            x+=1
+        filteredColumn = zip(column, filter)           
+
+        for row in filteredColumn:
+            #print(str(row[1]) + ": " + str(x) + ", " + str(y))
+            if (min and row[1]) or not min:
+                newSheet.cell(x, y, row[0])
+                x+=1
             
         y+=1 
-    
+        
     wb.save(newFile)
+
+
+def generateSpreadsheets():
+    year=date.today().year
 
 
 ### Tests ####
@@ -151,8 +162,7 @@ def unredactByYear(filename, values, newValues, year):
 def test_loadfile(columnHeadings):
     expectedColumns = ['Letter','Series','Piece', 'Item', 'Treasury Case number', 'Home Office case number', 'First names/Initials', 'Surname', 'Age', 'Occupation', 'Award granted', 'Brief summary of grounds for recommendation']   
     assert columnHeadings == expectedColumns  
-    
-    
+       
 def test_all_ints(list):
     assert all(isinstance(x, int) for x in list)
     
@@ -182,19 +192,19 @@ def test_redactByYear_testFile(toRedactList, year):
         expectedRedactionList = [False,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False]
         assert expectedRedactionList == toRedactList
 
-def test_filterByYear_testFile(filterList, year):    
+def test_selectByYear_testFile(selectList, year):    
     if year == 2022:
-        expectedFilterList = [True,True,True,True,True,True,True,True,True,True,True,True,True,True,True,True,True,True,True,True,True,True,True,True,True,True]
-        assert expectedFilterList == filterList
+        expectedSelectList = [True,True,True,True,True,True,True,True,True,True,True,True,True,True,True,True,True,True,True,True,True,True,True,True,True,True]
+        assert expectedSelectList == selectList
     elif year == 2023:
-        expectedFilterList = [True,True,True,True,True,True,True,True,True,True,True,True,True,True,False,False,True,True,True,True,True,True,True,True,True,True]
-        assert expectedFilterList == filterList
+        expectedSelectList = [False,False,False,False,False,False,False,False,False,False,False,False,False,False,True,True,False,False,False,False,False,False,False,False,False,False]
+        assert expectedSelectList == selectList
     elif year == 2024:
-        expectedFilterList = [True,True,True,True,True,True,True,True,True,True,True,True,True,True,True,True,False,False,False,True,True,True,True,True,True,True]
-        assert expectedFilterList == filterList
+        expectedSelectList = [False,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False,True,True,True,False,False,False,False,False,False,False]
+        assert expectedSelectList == selectList
     else:
-        expectedFilterList = [True,True,True,True,True,True,True,True,True,True,True,True,True,True,True,True,True,True,True,True,False,False,False,True,True,True]
-        assert expectedFilterList == filterList
+        expectedSelectList = [False,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False,True,True,True,False,False,False]
+        assert expectedSelectList == selectList
 
 
 ### Main        
@@ -220,4 +230,4 @@ if(sheetRedactionNeededCheck(openingList)):
     newColumns = redactColumns(dict((key, currentSpreadsheet[key]) for key in ['Occupation', 'Brief summary of grounds for recommendation']), openingList, 1945)
     #pp(newColumns)
     
-#unredactByYear("test.xlsx", currentSpreadsheet, newColumns, 2022)
+unredactByYear("test.xlsx", currentSpreadsheet, newColumns, 2024)
