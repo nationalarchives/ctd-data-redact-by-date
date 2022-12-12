@@ -46,32 +46,60 @@ def insertCoveringDateValues(sheet, dateList):
 
 
 def openingCalculation(age, year):
+    ''' return the year the record can be opened (100 years after birth) given an age in a given year'''
     return (year - age) + 100 
 
 
-def createOpeningList(ages, years):   
-    return list(map(openingCalculation, ages, years))
+def createOpeningList(agesList, yearsList):   
+    ''' return a list of years in which the record will be open given a list of ages and list of years'''
+    return list(map(openingCalculation, agesList, yearsList))
 
 
 def sheetRedactionNeededCheck(openingList):
+    ''' return False if no opening dates in the given list are later than the current year'''
     return False if max(openingList) <= date.today().year else True
-    
+
+        
+def filterByYear(previousRedactionList, currentRedactionList):
+    ''' Return filter of changed redaction'''    
+    return [True if a == b else False for a, b in zip(previousRedactionList, currentRedactionList)]    
+
 
 def redactColumns(columnsToRedact, openingList, lastYearInSeries, year=date.today().year):
-    ''' 
-    col1 & col2 -> {"base": [{col1Name:col1, col2Name:col2}], year: [{col1Name: col1_redacted, col2Name: col2_redacted], year+1 [{col1Name: col1_redacted, col2Name: col2_redacted]... max_year: [{col1Name: col1_redacted, col2Name: col2_redacted]}
+    ''' given a dictionary containung the columns that may need redacting, return a dict containing the original record values and
+    the processed values for each year, by year, until all records have been opened. 
+    
+    {"base": [{col1Name:col1, col2Name:col2}], 
+    year: [{col1Name: col1_redacted, col2Name: col2_redacted], 
+    year+1 [{col1Name: col1_redacted, col2Name: col2_redacted]... 
+    max_year: [{col1Name: col1_redacted, col2Name: col2_redacted]}
+    
     '''
+    
     boilerplate = "[Additional information regarding this case will be added to the catalogue when the case becomes over 100 years old. In cases when the date is not known, the latest date in the series (" + str(lastYearInSeries) + ") will be used]"
     
     processedColumns = {"base":columnsToRedact}
     
     yearsToPublish = list(range(year, max(openingList)+1))
+    previousRedactions = []
     
     for currentYear in yearsToPublish:
         #print(currentYear)
         
         toRedact = [True if currentYear < openingYear else False for openingYear in openingList]
         test_redactByYear_testFile(toRedact, currentYear)
+        #print(toRedact)
+        
+        filter = [True] * len(openingList)
+        
+        if previousRedactions == []:
+            previousRedactions = toRedact
+        else:
+            filter = filterByYear(previousRedactions, toRedact)
+            previousRedactions = toRedact
+        
+        test_filterByYear_testFile(filter, currentYear)
+        
         processedColumns[currentYear] = {}
     
         for columnName, column in columnsToRedact.items():
@@ -79,7 +107,6 @@ def redactColumns(columnsToRedact, openingList, lastYearInSeries, year=date.toda
             processedColumns[currentYear][columnName]=newColumn
     
     return processedColumns
-        
 
 
 def unredactByYear(filename, values, newValues, year):
@@ -87,7 +114,12 @@ def unredactByYear(filename, values, newValues, year):
     
     wb = Workbook()
     newFilename = str(year) + "_" + filename
-    path = os.path.join('data/converted/' + str(year), newFilename) 
+    pathToFile = os.path.join('data', 'converted' + str(year))
+    
+    if not os.path.exists(pathToFile):
+        os.makedirs(pathToFile)
+    
+    newFile = os.path.join(pathToFile, newFilename) 
     
     newSheet = wb.active
     
@@ -108,14 +140,9 @@ def unredactByYear(filename, values, newValues, year):
             newSheet.cell(x, y, row[x - 2])
             x+=1
             
-        y+=1
-        
+        y+=1 
     
-    #newSheet.insert_cols(11)
-    #newSheet.cell(1, 11, "Covering Dates")    
-        
-    
-    wb.save(path)
+    wb.save(newFile)
 
 
 ### Tests ####
@@ -155,6 +182,20 @@ def test_redactByYear_testFile(toRedactList, year):
         expectedRedactionList = [False,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False]
         assert expectedRedactionList == toRedactList
 
+def test_filterByYear_testFile(filterList, year):    
+    if year == 2022:
+        expectedFilterList = [True,True,True,True,True,True,True,True,True,True,True,True,True,True,True,True,True,True,True,True,True,True,True,True,True,True]
+        assert expectedFilterList == filterList
+    elif year == 2023:
+        expectedFilterList = [True,True,True,True,True,True,True,True,True,True,True,True,True,True,False,False,True,True,True,True,True,True,True,True,True,True]
+        assert expectedFilterList == filterList
+    elif year == 2024:
+        expectedFilterList = [True,True,True,True,True,True,True,True,True,True,True,True,True,True,True,True,False,False,False,True,True,True,True,True,True,True]
+        assert expectedFilterList == filterList
+    else:
+        expectedFilterList = [True,True,True,True,True,True,True,True,True,True,True,True,True,True,True,True,True,True,True,True,False,False,False,True,True,True]
+        assert expectedFilterList == filterList
+
 
 ### Main        
 
@@ -179,4 +220,4 @@ if(sheetRedactionNeededCheck(openingList)):
     newColumns = redactColumns(dict((key, currentSpreadsheet[key]) for key in ['Occupation', 'Brief summary of grounds for recommendation']), openingList, 1945)
     #pp(newColumns)
     
-unredactByYear("test.xlsx", currentSpreadsheet, newColumns, 2022)
+#unredactByYear("test.xlsx", currentSpreadsheet, newColumns, 2022)
