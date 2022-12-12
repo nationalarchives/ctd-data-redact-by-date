@@ -1,15 +1,17 @@
 # Function to read data from spreadsheet
 
 import os, re
+from shutil import copyfile
 from pprintpp import pprint as pp
 from openpyxl import Workbook, load_workbook
 from openpyxl.styles import Font
 from datetime import date
+from pathlib import Path
 
 def getSpreadsheetValues(filename):
     ''' Gets spreadsheet by name and returns the spreadsheet as a worksheet and a list of column headings '''
-    path = os.path.join('data', filename) 
-    wb = load_workbook(filename = path)
+    #path = os.path.join('data', filename) 
+    wb = load_workbook(filename)
     
     sheet = wb.worksheets[0]
     values={}
@@ -64,6 +66,8 @@ def selectByYear(previousRedactionList, currentRedactionList):
     ''' Return filter of changed redaction'''    
     return [False if a == b else True for a, b in zip(previousRedactionList, currentRedactionList)]    
 
+def yearsToPublish(openingList, year=date.today().year):
+    return list(range(year, max(openingList)+1))
 
 def redactColumns(columnsToRedact, openingList, lastYearInSeries, year=date.today().year, minimum=True):
     ''' given a dictionary containung the columns that may need redacting, return a dict containing the original record values and
@@ -80,10 +84,10 @@ def redactColumns(columnsToRedact, openingList, lastYearInSeries, year=date.toda
     
     processedColumns = {"base":columnsToRedact}
     
-    yearsToPublish = list(range(year, max(openingList)+1))
+    yearsToPublishList = yearsToPublish(openingList)
     previousRedactions = []
     
-    for currentYear in yearsToPublish:
+    for currentYear in yearsToPublishList:
         #print(currentYear)
         
         toRedact = [True if currentYear < openingYear else False for openingYear in openingList]
@@ -108,18 +112,20 @@ def redactColumns(columnsToRedact, openingList, lastYearInSeries, year=date.toda
     
     return processedColumns
 
+def pathToFile(year):
+    path = os.path.join('data', 'converted',str(year))
+    if not os.path.exists(path):
+        os.makedirs(path)
+    return path
 
 def unredactByYear(filename, values, newValues, year, min=True):
     ''' print out a new spreadsheet with the full text for all columns for just the rows where the year is 100 years since birth'''
     
     wb = Workbook()
     newFilename = str(year) + "_" + filename
-    pathToFile = os.path.join('data', 'converted',str(year))
+    path = pathToFile(year)
     
-    if not os.path.exists(pathToFile):
-        os.makedirs(pathToFile)
-    
-    newFile = os.path.join(pathToFile, newFilename) 
+    newFile = os.path.join(path, newFilename) 
     
     newSheet = wb.active
     
@@ -152,9 +158,39 @@ def unredactByYear(filename, values, newValues, year, min=True):
     wb.save(newFile)
 
 
-def generateSpreadsheets():
-    year=date.today().year
+def generateSpreadsheets(filename, values, newValues, openingList):
+    yearsToPublishList = yearsToPublish(openingList)
+    
+    for currentYear in yearsToPublishList:
+        unredactByYear(filename, values, newValues, currentYear)
+        
+def getFileList(myDir):
+    return [file for file in myDir.glob("[!~.]*.xlsx")]
 
+def generateFiles():
+    for file in getFileList(Path('data')):
+        currentSpreadsheet = getSpreadsheetValues(file)
+        
+        ageList = getAgeFromColumn(currentSpreadsheet['Age'])
+        test_all_ints(ageList)
+        
+        yearList = getYearFromColumn(currentSpreadsheet['Brief summary of grounds for recommendation'])
+        test_all_ints(yearList)
+        
+        insertCoveringDateValues(currentSpreadsheet, yearList)
+        
+        openingList = createOpeningList(ageList, yearList)
+        test_all_ints(openingList)
+        
+        if(sheetRedactionNeededCheck(openingList)):
+            newColumnValues = redactColumns(dict((key, currentSpreadsheet[key]) for key in ['Occupation', 'Brief summary of grounds for recommendation']), openingList, 1945)
+            generateSpreadsheets(os.path.basename(file), currentSpreadsheet, newColumnValues, openingList)
+        else:
+            path = pathToFile(date.today().year)
+            filename = os.path.splitext(os.path.basename(file))[0] + '_noredactions' + os.path.splitext(os.path.basename(file))[1]
+            copyfile(file, os.path.join(path, filename))
+        
+        
 
 ### Tests ####
 
@@ -209,18 +245,19 @@ def test_selectByYear_testFile(selectList, year):
 
 ### Main        
 
-currentSpreadsheet = getSpreadsheetValues('test.xlsx')
-test_loadfile(list(currentSpreadsheet.keys()))
+'''
+testSpreadsheet = getSpreadsheetValues('test.xlsx')
+test_loadfile(list(testSpreadsheet.keys()))
 
-ageList = getAgeFromColumn(currentSpreadsheet['Age'])
+ageList = getAgeFromColumn(testSpreadsheet['Age'])
 test_all_ints(ageList)
 test_age_testFile(ageList)
 
-yearList = getYearFromColumn(currentSpreadsheet['Brief summary of grounds for recommendation'])
+yearList = getYearFromColumn(testSpreadsheet['Brief summary of grounds for recommendation'])
 test_all_ints(yearList)
 test_year_testFile(yearList)
 
-insertCoveringDateValues(currentSpreadsheet, yearList)
+insertCoveringDateValues(testSpreadsheet, yearList)
 
 openingList = createOpeningList(ageList, yearList)
 test_all_ints(openingList)
@@ -230,4 +267,7 @@ if(sheetRedactionNeededCheck(openingList)):
     newColumns = redactColumns(dict((key, currentSpreadsheet[key]) for key in ['Occupation', 'Brief summary of grounds for recommendation']), openingList, 1945)
     #pp(newColumns)
     
-unredactByYear("test.xlsx", currentSpreadsheet, newColumns, 2024)
+#generateSpreadsheets("test.xlsx", currentSpreadsheet, newColumns, openingList)
+'''
+
+generateFiles()
