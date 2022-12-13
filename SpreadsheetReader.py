@@ -131,7 +131,7 @@ def redactColumns(columnsToRedact, openingList, lastYearInSeries, year=date.toda
         processedColumns[currentYear] = {"filter": filter}
     
         for columnName, column in columnsToRedact.items():
-            newColumn = [boilerplate if record[1] and record[0] is not "" else record[0] for record in zip(column, toRedact)]   
+            newColumn = [boilerplate if record[1] and record[0] != "" else record[0] for record in zip(column, toRedact)]   
             processedColumns[currentYear][columnName]=newColumn
     
     return processedColumns
