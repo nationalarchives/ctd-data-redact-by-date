@@ -17,11 +17,12 @@ def getSpreadsheetValues(filename):
     values={}
     
     for col in sheet.columns:
-        column = [cell.value for cell in col if cell.value is not None]
+        #column = [cell.value for cell in col if cell.value is not None]
+        column = [cell.value if cell.value is not None else "" for cell in col]
         
         if len(column) > 0:
-            values[column[0]] = column[1:]
-    
+            values[str(column[0]).strip()] = column[1:]
+            
     return (values)
        
 
@@ -33,13 +34,36 @@ def getAgeFromColumn(column):
 
 
 def getYearFromColumn(column):
-    ''' Get year from named column and return a list of years'''
+    ''' Get year from named column and return a dictionary of years and covering dates'''
     # regex for dddd in text value
     # since Python 3.8 := allows you to name an evaluation as a variable which you can use int he list comparhension see https://stackoverflow.com/questions/26672532/how-to-set-local-variable-in-list-comprehension
-    years = [int(years[0]) if len((years := re.findall(r'\d{4}', entry))) == 1 else years for entry in column] 
+    years = [int(years[0]) if len(years := re.findall(r'\d{4}', entry)) == 1 else years for entry in column] 
     #pp(years)
-    return years
+       
+    return codifyYears(years)
 
+
+def codifyYears(yearsList):
+    defaultYear = 1946
+    codifiedYears = []
+    coveringDates = []
+       
+    for year in yearsList:
+        if type(year) is not int:
+            if len(year) > 1:
+                codifiedYears.append(int(max(year)))
+                coveringDates.append(str(min(year)) + " - " + max(year))
+            else:
+                codifiedYears.append(defaultYear)
+                coveringDates.append(defaultYear)
+        else:
+            codifiedYears.append(year)
+            coveringDates.append(year)
+    
+    #print(codifiedYears)
+    #print(coveringDates)
+    return zip(codifiedYears, coveringDates)
+             
 
 def insertCoveringDateValues(sheet, dateList):
     ''' Insert covering date values into dictionary of spreadsheet values '''
@@ -91,7 +115,7 @@ def redactColumns(columnsToRedact, openingList, lastYearInSeries, year=date.toda
         #print(currentYear)
         
         toRedact = [True if currentYear < openingYear else False for openingYear in openingList]
-        test_redactByYear_testFile(toRedact, currentYear)
+        #test_redactByYear_testFile(toRedact, currentYear)
         #print(toRedact)
         
         filter = [True] * len(openingList)
@@ -102,12 +126,12 @@ def redactColumns(columnsToRedact, openingList, lastYearInSeries, year=date.toda
             filter = selectByYear(previousRedactions, toRedact)
             previousRedactions = toRedact
         
-        test_selectByYear_testFile(filter, currentYear)
+        #test_selectByYear_testFile(filter, currentYear)
         
         processedColumns[currentYear] = {"filter": filter}
     
         for columnName, column in columnsToRedact.items():
-            newColumn = [boilerplate if record[1] else record[0] for record in zip(column, toRedact)]   
+            newColumn = [boilerplate if record[1] and record[0] is not "" else record[0] for record in zip(column, toRedact)]   
             processedColumns[currentYear][columnName]=newColumn
     
     return processedColumns
@@ -122,14 +146,9 @@ def unredactByYear(filename, values, newValues, year, min=True):
     ''' print out a new spreadsheet with the full text for all columns for just the rows where the year is 100 years since birth'''
     
     wb = Workbook()
-    newFilename = str(year) + "_" + filename
-    path = pathToFile(year)
-    
-    newFile = os.path.join(path, newFilename) 
-    
     newSheet = wb.active
     
-    y = 1
+    col = 1
     
     #print(values)
     
@@ -138,24 +157,29 @@ def unredactByYear(filename, values, newValues, year, min=True):
     filter = newValues[year]["filter"]
     
     for title, column in values.items():
-        newSheet.cell(1, y, title).font = Font(bold=True)
+        newSheet.cell(1, col, title).font = Font(bold=True)
     
-        x = 2
+        row = 2
         
         if title in newValues[year].keys():
             column = newValues[year][title]
 
         filteredColumn = zip(column, filter)           
 
-        for row in filteredColumn:
+        for filteredRow in filteredColumn:
             #print(str(row[1]) + ": " + str(x) + ", " + str(y))
-            if (min and row[1]) or not min:
-                newSheet.cell(x, y, row[0])
-                x+=1
+            if (min and filteredRow[1]) or not min:
+                newSheet.cell(row, col, filteredRow[0])
+                row+=1
             
-        y+=1 
-        
-    wb.save(newFile)
+        col+=1 
+    
+    #print("Last cel written for " + str(year) + " x:" + str(row) + ", y: " + str(col))
+    if row > 2:   
+        path = pathToFile(year)  
+        newFilename = os.path.splitext(os.path.basename(filename))[0] + "_" + str(year) + os.path.splitext(os.path.basename(filename))[1]
+        newFile = os.path.join(path, newFilename)  
+        wb.save(newFile)
 
 
 def generateSpreadsheets(filename, values, newValues, openingList):
@@ -169,26 +193,45 @@ def getFileList(myDir):
 
 def generateFiles():
     for file in getFileList(Path('data')):
+        print("Processing " + os.path.basename(file))
         currentSpreadsheet = getSpreadsheetValues(file)
+        print(currentSpreadsheet.keys())
         
-        ageList = getAgeFromColumn(currentSpreadsheet['Age'])
-        test_all_ints(ageList)
+        try:        
+            #test_loadfile(list(currentSpreadsheet.keys()))
         
-        yearList = getYearFromColumn(currentSpreadsheet['Brief summary of grounds for recommendation'])
-        test_all_ints(yearList)
+            ageList = getAgeFromColumn(currentSpreadsheet['Age'])
+            test_all_ints(ageList)
         
-        insertCoveringDateValues(currentSpreadsheet, yearList)
-        
-        openingList = createOpeningList(ageList, yearList)
-        test_all_ints(openingList)
-        
+            dates = getYearFromColumn(currentSpreadsheet['Brief summary of grounds for recommendation'])        
+            
+            yearList = []
+            coveringDatesList = []
+            for parts in dates:
+                yearList.append(parts[0])
+                coveringDatesList.append(parts[1])
+            
+            insertCoveringDateValues(currentSpreadsheet, coveringDatesList)
+            print("Adding covering dates for " + os.path.basename(file))
+            
+            openingList = createOpeningList(ageList, yearList)
+            test_all_ints(openingList)
+            
+        except AssertionError as e:
+            print("Issue with " + os.path.basename(file) + "skipping")
+            print(e)
+            continue
+            
         if(sheetRedactionNeededCheck(openingList)):
-            newColumnValues = redactColumns(dict((key, currentSpreadsheet[key]) for key in ['Occupation', 'Brief summary of grounds for recommendation']), openingList, 1945)
+            newColumnValues = redactColumns(dict((key, currentSpreadsheet[key]) for key in ['Occupation', 'Brief summary of grounds for recommendation']), openingList, 1946)
             generateSpreadsheets(os.path.basename(file), currentSpreadsheet, newColumnValues, openingList)
+            print(os.path.basename(file) + " redacted. Spreadsheets with redacted descriptions and unredactions generated.")
         else:
             path = pathToFile(date.today().year)
-            filename = os.path.splitext(os.path.basename(file))[0] + '_noredactions' + os.path.splitext(os.path.basename(file))[1]
+            filename = os.path.splitext(os.path.basename(file))[0] + '_NoRedactions' + os.path.splitext(os.path.basename(file))[1]
             copyfile(file, os.path.join(path, filename))
+            print(os.path.basename(file) + " copied over, no redactions needed")
+
         
         
 
@@ -197,11 +240,12 @@ def generateFiles():
 
 def test_loadfile(columnHeadings):
     expectedColumns = ['Letter','Series','Piece', 'Item', 'Treasury Case number', 'Home Office case number', 'First names/Initials', 'Surname', 'Age', 'Occupation', 'Award granted', 'Brief summary of grounds for recommendation']   
-    assert columnHeadings == expectedColumns  
+    assert columnHeadings == expectedColumns, "Error in expected columns: " + str(columnHeadings)  
        
 def test_all_ints(list):
-    assert all(isinstance(x, int) for x in list)
-    
+    assert all(isinstance(x, int) for x in list), "Error in expected data types: " + str(list)
+
+'''    
 def test_age_testFile(ageList):
     expectedAges = [16,18,18,20,25,45,16,18,20,16,18,20,16,18,18,20,16,18,20,36,16,18,20,30,25,23]   
     assert expectedAges == ageList
@@ -241,7 +285,7 @@ def test_selectByYear_testFile(selectList, year):
     else:
         expectedSelectList = [False,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False,False,True,True,True,False,False,False]
         assert expectedSelectList == selectList
-
+'''
 
 ### Main        
 
