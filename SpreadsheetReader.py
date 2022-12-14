@@ -20,7 +20,7 @@ def getSpreadsheetValues(filename):
         #column = [cell.value for cell in col if cell.value is not None]
         column = [cell.value if cell.value is not None else "" for cell in col]
         
-        if len(column) > 0:
+        if len(column) > 0 and column.count("") != len(column):
             values[str(column[0]).strip()] = column[1:]
             
     return (values)
@@ -29,30 +29,54 @@ def getSpreadsheetValues(filename):
 
 def getAgeFromColumn(column):
     ''' Get age from named column, if no age given then assume age is 18, and return a list of ages '''
-    # if value is number then age otherwise default value   
-    return [entry if str(entry).strip().isnumeric() else 18 for entry in column]         
+    # if value is number then age otherwise default value       
+    return [entry if str(entry).strip().isnumeric() else 18 for entry in list(filter("", column))]         
 
 
 def getYearFromColumn(column):
     ''' Get year from named column and return a dictionary of years and covering dates'''
     # regex for dddd in text value
     # since Python 3.8 := allows you to name an evaluation as a variable which you can use int he list comparhension see https://stackoverflow.com/questions/26672532/how-to-set-local-variable-in-list-comprehension
-    years = [int(years[0]) if len(years := re.findall(r'\d{4}', entry)) == 1 else years for entry in column] 
+    years = [int(years[0]) if len(years := re.findall(r'\d{4}', entry)) == 1 else years for entry in list(filter("", column))] 
     #pp(years)
        
     return codifyYears(years)
 
+def getDateFromList(dateList, earliest, latest, default, max=True):
+    foundDate = ""
+    
+    for date in dateList:
+        if (foundDate == "" and foundDate > earliest and foundDate < latest) or (max and date < latest and date > foundDate) or (not(max) and date > earliest and date < foundDate):
+            foundDate = date
+            
+    if foundDate == "":
+        foundDate = default
+
 
 def codifyYears(yearsList):
     defaultYear = 1946
+    earliest = 1935
+    latest = 1946
     codifiedYears = []
     coveringDates = []
        
     for year in yearsList:
-        if type(year) is not int:
+        if type(year) is not int or year < earliest or year > latest:
             if len(year) > 1:
-                codifiedYears.append(int(max(year)))
-                coveringDates.append(str(min(year)) + " - " + max(year))
+                latestDate = "" 
+                
+                if int(max(year)) > earliest and int(max(year)) < latest:
+                    latestDate = int(max(year))
+                else:
+                    latestDate = getDateFromList(year, earliest, latest, defaultYear)
+                
+                if int(min(year)) > earliest and int(min(year)) < latest:
+                    earliestDate = int(min(year))
+                else:
+                    earliestDate = getDateFromList(year, earliest, latest, defaultYear, False)
+                
+                codifiedYears.append(latestDate)
+                coveringDates.append(earliestDate + " - " + latestDate)
             else:
                 codifiedYears.append(defaultYear)
                 coveringDates.append(defaultYear)
