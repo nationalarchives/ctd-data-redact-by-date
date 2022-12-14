@@ -1,7 +1,6 @@
 # Function to read data from spreadsheet
 
-import os, re
-from shutil import copyfile
+import os, re, shutil
 from pprintpp import pprint as pp
 from openpyxl import Workbook, load_workbook
 from openpyxl.styles import Font
@@ -25,32 +24,36 @@ def getSpreadsheetValues(filename):
             
     return (values)
        
-
+def removeBlanksFromColumn(column):
+    return [value for value in column if value != ""]  
 
 def getAgeFromColumn(column):
     ''' Get age from named column, if no age given then assume age is 18, and return a list of ages '''
-    # if value is number then age otherwise default value       
-    return [entry if str(entry).strip().isnumeric() else 18 for entry in list(filter("", column))]         
+    # if value is number then age otherwise default value      
+    return [entry if str(entry).strip().isnumeric() else 18 for entry in removeBlanksFromColumn(column)]         
 
 
 def getYearFromColumn(column):
     ''' Get year from named column and return a dictionary of years and covering dates'''
     # regex for dddd in text value
-    # since Python 3.8 := allows you to name an evaluation as a variable which you can use int he list comparhension see https://stackoverflow.com/questions/26672532/how-to-set-local-variable-in-list-comprehension
-    years = [int(years[0]) if len(years := re.findall(r'\d{4}', entry)) == 1 else years for entry in list(filter("", column))] 
+    # since Python 3.8 := allows you to name an evaluation as a variable which you can use int he list comparhension see https://stackoverflow.com/questions/26672532/how-to-set-local-variable-in-list-comprehension 
+    years = [int(years[0]) if len(years := re.findall(r'\d{4}', entry)) == 1 else years for entry in removeBlanksFromColumn(column)] 
     #pp(years)
        
     return codifyYears(years)
 
 def getDateFromList(dateList, earliest, latest, default, max=True):
-    foundDate = ""
-    
+    foundDate = -1
+ 
     for date in dateList:
-        if (foundDate == "" and foundDate > earliest and foundDate < latest) or (max and date < latest and date > foundDate) or (not(max) and date > earliest and date < foundDate):
+        date = int(date)
+        if (foundDate == -1 and foundDate > earliest and foundDate < latest) or (max and date < latest and date > foundDate) or (not(max) and date > earliest and date < foundDate):
             foundDate = date
             
-    if foundDate == "":
+    if foundDate == -1:
         foundDate = default
+        
+    return foundDate
 
 
 def codifyYears(yearsList):
@@ -61,7 +64,7 @@ def codifyYears(yearsList):
     coveringDates = []
        
     for year in yearsList:
-        if type(year) is not int or year < earliest or year > latest:
+        if type(year) is not int:
             if len(year) > 1:
                 latestDate = "" 
                 
@@ -76,10 +79,13 @@ def codifyYears(yearsList):
                     earliestDate = getDateFromList(year, earliest, latest, defaultYear, False)
                 
                 codifiedYears.append(latestDate)
-                coveringDates.append(earliestDate + " - " + latestDate)
+                coveringDates.append(str(earliestDate) + " - " + str(latestDate))
             else:
                 codifiedYears.append(defaultYear)
                 coveringDates.append(defaultYear)
+        elif year < earliest or year > latest:
+            codifiedYears.append(defaultYear)
+            coveringDates.append(defaultYear)           
         else:
             codifiedYears.append(year)
             coveringDates.append(year)
@@ -215,7 +221,11 @@ def generateSpreadsheets(filename, values, newValues, openingList):
 def getFileList(myDir):
     return [file for file in myDir.glob("[!~.]*.xlsx")]
 
-def generateFiles():
+def generateFiles(reset=True):
+    
+    if reset:
+        shutil.rmtree(os.path.join('data', 'converted'))
+    
     for file in getFileList(Path('data')):
         print("Processing " + os.path.basename(file))
         currentSpreadsheet = getSpreadsheetValues(file)
@@ -245,7 +255,8 @@ def generateFiles():
             print("Issue with " + os.path.basename(file) + "skipping")
             print(e)
             continue
-            
+        
+    
         if(sheetRedactionNeededCheck(openingList)):
             newColumnValues = redactColumns(dict((key, currentSpreadsheet[key]) for key in ['Occupation', 'Brief summary of grounds for recommendation']), openingList, 1946)
             generateSpreadsheets(os.path.basename(file), currentSpreadsheet, newColumnValues, openingList)
@@ -253,10 +264,13 @@ def generateFiles():
         else:
             path = pathToFile(date.today().year)
             filename = os.path.splitext(os.path.basename(file))[0] + '_NoRedactions' + os.path.splitext(os.path.basename(file))[1]
-            copyfile(file, os.path.join(path, filename))
+            try: 
+                shutil.copyfile(file, os.path.join(path, filename))
+            except shutil.SameFileError:
+                pass
             print(os.path.basename(file) + " copied over, no redactions needed")
 
-        
+      
         
 
 ### Tests ####
@@ -338,4 +352,4 @@ if(sheetRedactionNeededCheck(openingList)):
 #generateSpreadsheets("test.xlsx", currentSpreadsheet, newColumns, openingList)
 '''
 
-generateFiles()
+generateFiles(False)
