@@ -221,10 +221,10 @@ def generateSpreadsheets(filename, values, newValues, openingList):
 def generateSummary(filename, ageList, coveringDatesList, openingList):
     if os.path.exists(os.path.join('data', 'converted','summary.xlsx')):
         wb = load_workbook(os.path.join('data', 'converted', 'summary.xlsx'))
-        ws = wb.active
-    else:
-        wb = Workbook()
         ws = wb.create_sheet()
+    else:
+        wb = Workbook()        
+        ws = wb.active
         
     ws.title = filename
     colHeadings = ["Item", "Age", "Covering Dates", "Opening Year"]
