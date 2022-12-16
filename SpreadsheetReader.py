@@ -219,8 +219,8 @@ def generateSpreadsheets(filename, values, newValues, openingList):
         unredactByYear(filename, values, newValues, currentYear)
 
 def generateSummary(filename, ageList, coveringDatesList, openingList):
-    if os.path.exists(os.path.join('data', 'converted','summary.xlsx')):
-        wb = load_workbook(os.path.join('data', 'converted', 'summary.xlsx'))
+    if os.path.exists(os.path.join('data', 'summary', 'summary.xlsx')):
+        wb = load_workbook(os.path.join('data', 'summary', 'summary.xlsx'))
         ws = wb.create_sheet()
     else:
         wb = Workbook()        
@@ -246,7 +246,7 @@ def generateSummary(filename, ageList, coveringDatesList, openingList):
             
         col += 1
             
-    wb.save(os.path.join('data', 'converted', 'summary.xlsx'))
+    wb.save(os.path.join('data', 'summary', 'summary.xlsx'))
             
     
     
@@ -262,8 +262,8 @@ def generateFiles(reset=True,output=True,summary=True):
         shutil.rmtree(os.path.join('data', 'converted'))
         
     if summary:
-        if os.path.exists(os.path.join('data', 'summary.xlsx')):
-            os.remove(os.path.join('data', 'summary.xlsx'))
+        if os.path.exists(os.path.join('data', 'summary', 'summary.xlsx')):
+            os.remove(os.path.join('data', 'summary', 'summary.xlsx'))
     
     for file in getFileList(Path('data')):
         print("Processing " + os.path.basename(file))
