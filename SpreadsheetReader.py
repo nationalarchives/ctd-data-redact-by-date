@@ -217,19 +217,58 @@ def generateSpreadsheets(filename, values, newValues, openingList):
     
     for currentYear in yearsToPublishList:
         unredactByYear(filename, values, newValues, currentYear)
+
+def generateSummary(filename, ageList, coveringDatesList, openingList):
+    if os.path.exists(os.path.join('data', 'converted','summary.xlsx')):
+        wb = load_workbook(os.path.join('data', 'converted', 'summary.xlsx'))
+        ws = wb.active
+    else:
+        wb = Workbook()
+        ws = wb.create_sheet()
+        
+    ws.title = filename
+    colHeadings = ["Item", "Age", "Covering Dates", "Opening Year"]
+    
+    col = 1
+    count = 1
+    
+    for heading in colHeadings:
+        row = 2
+        ws.cell(1, col, heading).font = Font(bold=True)
+        
+        for age, coveringDate, opening in zip(ageList, coveringDatesList, openingList):
+            ws.cell(row, 1, row-1)
+            ws.cell(row, 2, age)
+            ws.cell(row, 3, coveringDate)
+            ws.cell(row, 4, opening)
+            
+            row += 1
+            
+        col += 1
+            
+    wb.save(os.path.join('data', 'converted', 'summary.xlsx'))
+            
+    
+    
+        
+    
         
 def getFileList(myDir):
     return [file for file in myDir.glob("[!~.]*.xlsx")]
 
-def generateFiles(reset=True):
+def generateFiles(reset=True,output=True,summary=True):
     
     if reset:
         shutil.rmtree(os.path.join('data', 'converted'))
+        
+    if summary:
+        if os.path.exists(os.path.join('data', 'summary.xlsx')):
+            os.remove(os.path.join('data', 'summary.xlsx'))
     
     for file in getFileList(Path('data')):
         print("Processing " + os.path.basename(file))
         currentSpreadsheet = getSpreadsheetValues(file)
-        print(currentSpreadsheet.keys())
+        #print(currentSpreadsheet.keys())
         
         try:        
             #test_loadfile(list(currentSpreadsheet.keys()))
@@ -257,18 +296,23 @@ def generateFiles(reset=True):
             continue
         
     
-        if(sheetRedactionNeededCheck(openingList)):
-            newColumnValues = redactColumns(dict((key, currentSpreadsheet[key]) for key in ['Occupation', 'Brief summary of grounds for recommendation']), openingList, 1946)
-            generateSpreadsheets(os.path.basename(file), currentSpreadsheet, newColumnValues, openingList)
-            print(os.path.basename(file) + " redacted. Spreadsheets with redacted descriptions and unredactions generated.")
-        else:
-            path = pathToFile(date.today().year)
-            filename = os.path.splitext(os.path.basename(file))[0] + '_NoRedactions' + os.path.splitext(os.path.basename(file))[1]
-            try: 
-                shutil.copyfile(file, os.path.join(path, filename))
-            except shutil.SameFileError:
-                pass
-            print(os.path.basename(file) + " copied over, no redactions needed")
+        if output:
+            if(sheetRedactionNeededCheck(openingList)):
+                newColumnValues = redactColumns(dict((key, currentSpreadsheet[key]) for key in ['Occupation', 'Brief summary of grounds for recommendation']), openingList, 1946)
+                generateSpreadsheets(os.path.basename(file), currentSpreadsheet, newColumnValues, openingList)
+                print(os.path.basename(file) + " redacted. Spreadsheets with redacted descriptions and unredactions generated.")
+            else:
+                path = pathToFile(date.today().year)
+                filename = os.path.splitext(os.path.basename(file))[0] + '_NoRedactions' + os.path.splitext(os.path.basename(file))[1]
+                try: 
+                    shutil.copyfile(file, os.path.join(path, filename))
+                except shutil.SameFileError:
+                    pass
+                print(os.path.basename(file) + " copied over, no redactions needed")
+                
+        if summary:   
+            generateSummary(os.path.splitext(os.path.basename(file))[0], ageList, coveringDatesList, openingList)   
+            
 
       
         
@@ -352,4 +396,4 @@ if(sheetRedactionNeededCheck(openingList)):
 #generateSpreadsheets("test.xlsx", currentSpreadsheet, newColumns, openingList)
 '''
 
-generateFiles(False)
+generateFiles(False, False, True)
