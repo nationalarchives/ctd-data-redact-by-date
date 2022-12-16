@@ -103,7 +103,7 @@ def insertCoveringDateValues(sheet, dateList):
 
 def openingCalculation(age, year):
     ''' return the year the record can be opened (100 years after birth) given an age in a given year'''
-    return (year - age) + 100 
+    return (year - age) + 101 
 
 
 def createOpeningList(agesList, yearsList):   
@@ -396,4 +396,4 @@ if(sheetRedactionNeededCheck(openingList)):
 #generateSpreadsheets("test.xlsx", currentSpreadsheet, newColumns, openingList)
 '''
 
-generateFiles(False, False, True)
+generateFiles()
