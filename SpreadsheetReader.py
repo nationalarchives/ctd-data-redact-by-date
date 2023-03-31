@@ -1,6 +1,6 @@
 # Function to read data from spreadsheet
 
-import os, re, shutil
+import os, re, shutil, csv
 from pprintpp import pprint as pp
 from openpyxl import Workbook, load_workbook
 from openpyxl.styles import Font
@@ -23,7 +23,21 @@ def getSpreadsheetValues(filename):
             values[str(column[0]).strip()] = column[1:]
             
     return (values)
-       
+
+def getCoveringDatesbyPiece(filename):
+    '''Gets a list of covering dates for each piece if there is a file with the specified name in the data/lib folder'''
+    coveringDates = dict()
+
+    if os.path.exists(os.path.join('data','lib', filename)):
+        with open(os.path.join('data','lib', filename)) as dateFile:
+            reader = csv.reader(dateFile, skipinitialspace=True)  
+            coveringDates = {(int(line[0]) if line[0].isnumeric else line[0]):(int(line[1]) if line[1].isnumeric else line[1]) for line in reader}   
+    else:
+        print("No covering dates specified at " + os.path.join('lib', filename))
+    
+    return coveringDates
+
+
 def removeBlanksFromColumn(column):
     return [value for value in column if value != ""]  
 
@@ -57,7 +71,7 @@ def getDateFromList(dateList, earliest, latest, default, max=True):
 
 
 def codifyYears(yearsList):
-    defaultYear = 1946
+    defaultYear = ""
     earliest = 1935
     latest = 1946
     codifiedYears = []
@@ -103,7 +117,10 @@ def insertCoveringDateValues(sheet, dateList):
 
 def openingCalculation(age, year):
     ''' return the year the record can be opened (100 years after birth) given an age in a given year'''
-    return (year - age) + 101 
+    if year != '':
+        return (year - age) + 101 
+    else:
+        return '?'
 
 
 def createOpeningList(agesList, yearsList):   
@@ -218,7 +235,7 @@ def generateSpreadsheets(filename, values, newValues, openingList):
     for currentYear in yearsToPublishList:
         unredactByYear(filename, values, newValues, currentYear)
 
-def generateSummary(filename, ageList, coveringDatesList, openingList):
+def generateSummary(filename, ageList, coveringDatesList, openingList, altOpeningList):
     if os.path.exists(os.path.join('data', 'summary', 'summary.xlsx')):
         wb = load_workbook(os.path.join('data', 'summary', 'summary.xlsx'))
         ws = wb.create_sheet()
@@ -227,7 +244,7 @@ def generateSummary(filename, ageList, coveringDatesList, openingList):
         ws = wb.active
         
     ws.title = filename
-    colHeadings = ["Item", "Age", "Covering Dates", "Opening Year"]
+    colHeadings = ["Item", "Age", "Covering Dates", "Opening Year", "Opening Note"]
     
     col = 1
     count = 1
@@ -236,12 +253,24 @@ def generateSummary(filename, ageList, coveringDatesList, openingList):
         row = 2
         ws.cell(1, col, heading).font = Font(bold=True)
         
-        for age, coveringDate, opening in zip(ageList, coveringDatesList, openingList):
+        for age, coveringDate, opening, altOpening in zip(ageList, coveringDatesList, openingList, altOpeningList):
             ws.cell(row, 1, row-1)
             ws.cell(row, 2, age)
             ws.cell(row, 3, coveringDate)
             ws.cell(row, 4, opening)
-            
+            if altOpening != '?' and altOpening <= 2023 and opening <= 2023:
+                ws.cell(row, 5, "Difference in opening date irrelivent because both before 2023")
+            elif altOpening != '?' and altOpening < opening:
+                ws.cell(row, 5, "Date in description earlier than supplied covering date. Alternate opening would be " + str(altOpening))
+                if '!' not in ws.title:
+                    ws.title += '!'
+            elif altOpening != '?' and altOpening > opening:
+                ws.cell(row, 5, "Date in description later than supplied covering date. Alternate opening would be " + str(altOpening))
+                if '!' not in ws.title:
+                    ws.title += '!'
+            elif altOpening == '?':
+                ws.cell(row, 5, "No alternative opening date found")
+
             row += 1
             
         col += 1
@@ -256,10 +285,11 @@ def generateSummary(filename, ageList, coveringDatesList, openingList):
 def getFileList(myDir):
     return [file for file in myDir.glob("[!~.]*.xlsx")]
 
-def generateFiles(reset=True,output=True,summary=True):
+def generateFiles(coveringDateFile='',reset=True,output=True,summary=True):
     
-    if reset:
+    if reset and os.path.exists(os.path.join('data', 'converted')):        
         shutil.rmtree(os.path.join('data', 'converted'))
+        os.makedirs(os.path.join('data', 'converted'))
         
     if summary:
         if os.path.exists(os.path.join('data', 'summary', 'summary.xlsx')):
@@ -275,19 +305,52 @@ def generateFiles(reset=True,output=True,summary=True):
         
             ageList = getAgeFromColumn(currentSpreadsheet['Age'])
             test_all_ints(ageList)
+
+            if '.' in coveringDateFile:
+                #filename = os.path.splitext(os.path.basename(file))[0]
+                piece = os.path.splitext(os.path.basename(file))[0].split('_')[1]
+                getCoveringDatesbyPieceDict = getCoveringDatesbyPiece(coveringDateFile)
+                if len(getCoveringDatesbyPieceDict) > 0:
+                    coveringDatebyPiece = getCoveringDatesbyPieceDict[int(piece)]
         
             dates = getYearFromColumn(currentSpreadsheet['Brief summary of grounds for recommendation'])        
-            
+                
             yearList = []
             coveringDatesList = []
+            coveringDatesByPieceList = []
+
             for parts in dates:
+                #print(parts)
                 yearList.append(parts[0])
                 coveringDatesList.append(parts[1])
-            
-            insertCoveringDateValues(currentSpreadsheet, coveringDatesList)
+                coveringDatesByPieceList.append(coveringDatebyPiece)
+
+            '''
+            if yearList != coveringDatesByPieceList:
+                print("Possibly anomologus dates in spreadsheet found (expected " + str(coveringDatebyPiece) + "): ", end="")
+                otherYears = set(coveringDatesList)
+                if coveringDatebyPiece in otherYears:
+                    otherYears.remove(coveringDatebyPiece)
+                print(otherYears)
+            '''    
+
+            insertCoveringDateValues(currentSpreadsheet, coveringDatesByPieceList)
             print("Adding covering dates for " + os.path.basename(file))
             
-            openingList = createOpeningList(ageList, yearList)
+
+            openingList = createOpeningList(ageList, coveringDatesByPieceList)
+            altOpeningList = createOpeningList(ageList, yearList)
+
+            '''
+            combinedLists = zip(openingList, altOpeningList)
+
+            row = 2
+            for default, byRow in combinedLists:        
+                if default > byRow and byRow > 2022:
+                    print("Row " + str(row) + ": Opening date is " + str(default) + " but earlier date of " + str(byRow) + " might be possible")
+                row += 1
+            '''
+
             test_all_ints(openingList)
             
         except AssertionError as e:
@@ -311,7 +374,7 @@ def generateFiles(reset=True,output=True,summary=True):
                 print(os.path.basename(file) + " copied over, no redactions needed")
                 
         if summary:   
-            generateSummary(os.path.splitext(os.path.basename(file))[0], ageList, coveringDatesList, openingList)   
+            generateSummary(os.path.splitext(os.path.basename(file))[0], ageList, coveringDatesByPieceList, openingList, altOpeningList)   
             
 
       
@@ -326,6 +389,9 @@ def test_loadfile(columnHeadings):
        
 def test_all_ints(list):
     assert all(isinstance(x, int) for x in list), "Error in expected data types: " + str(list)
+
+def test_get_covering_dates(coveringDateList):
+    assert coveringDateList[2] == 1940, "Error in returned value: expected 1940 got " + coveringDateList[2]
 
 '''    
 def test_age_testFile(ageList):
@@ -396,4 +462,6 @@ if(sheetRedactionNeededCheck(openingList)):
 #generateSpreadsheets("test.xlsx", currentSpreadsheet, newColumns, openingList)
 '''
 
-generateFiles()
+generateFiles('covering_dates.csv')
+
+#test_get_covering_dates(getCoveringDatesbyPiece('covering_dates.csv'))
