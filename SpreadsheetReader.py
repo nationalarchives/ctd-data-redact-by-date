@@ -228,14 +228,41 @@ def unredactByYear(filename, values, newValues, year, min=True):
         newFile = os.path.join(path, newFilename)  
         wb.save(newFile)
 
+def spreadsheetNoRedactions(filename, values):
+    ''' print out a new spreadsheet with the full text for all columns'''
+
+    wb = Workbook()
+    newSheet = wb.active
+    
+    col = 1
+    
+    for title, column in values.items():
+        newSheet.cell(1, col, title).font = Font(bold=True)
+        row = 2
+        for row_value in column:
+            newSheet.cell(row, col, row_value)
+            row+=1    
+        col+=1 
+    
+    #print("Last cel written for " + str(year) + " x:" + str(row) + ", y: " + str(col))
+    if row > 2:   
+        path = pathToFile(date.today().year)  
+        newFilename = os.path.splitext(os.path.basename(filename))[0] + '_NoRedactions' + os.path.splitext(os.path.basename(filename))[1]
+        newFile = os.path.join(path, newFilename)  
+        wb.save(newFile)    
+
 
 def generateSpreadsheets(filename, values, newValues, openingList):
+    ''' Create the spreadsheets for each year '''
     yearsToPublishList = yearsToPublish(openingList)
     
     for currentYear in yearsToPublishList:
         unredactByYear(filename, values, newValues, currentYear)
 
+
 def generateSummary(filename, ageList, coveringDatesList, openingList, altOpeningList):
+    ''' print out a summary spreadsheet, including covering dates comparison outcome, with information about each piece on a seperate tab '''
+
     if os.path.exists(os.path.join('data', 'summary', 'summary.xlsx')):
         wb = load_workbook(os.path.join('data', 'summary', 'summary.xlsx'))
         ws = wb.create_sheet()
@@ -259,7 +286,7 @@ def generateSummary(filename, ageList, coveringDatesList, openingList, altOpenin
             ws.cell(row, 3, coveringDate)
             ws.cell(row, 4, opening)
             if altOpening != '?' and altOpening <= 2023 and opening <= 2023:
-                ws.cell(row, 5, "Difference in opening date irrelivent because both before 2023")
+                ws.cell(row, 5, "Difference in opening date irrelevant because both before 2023")
             elif altOpening != '?' and altOpening < opening:
                 ws.cell(row, 5, "Date in description earlier than supplied covering date. Alternate opening would be " + str(altOpening))
                 if '!' not in ws.title:
@@ -275,17 +302,15 @@ def generateSummary(filename, ageList, coveringDatesList, openingList, altOpenin
             
         col += 1
             
-    wb.save(os.path.join('data', 'summary', 'summary.xlsx'))
-            
-    
-    
-        
+    wb.save(os.path.join('data', 'summary', 'summary.xlsx'))       
     
         
 def getFileList(myDir):
+    ''' Get a list of xlsx files in the given directory '''
     return [file for file in myDir.glob("[!~.]*.xlsx")]
 
 def generateFiles(coveringDateFile='',reset=True,output=True,summary=True):
+    ''' Main program. Expects spreadsheets to be in the data directory.'''
     
     if reset and os.path.exists(os.path.join('data', 'converted')):        
         shutil.rmtree(os.path.join('data', 'converted'))
@@ -332,11 +357,10 @@ def generateFiles(coveringDateFile='',reset=True,output=True,summary=True):
                 if coveringDatebyPiece in otherYears:
                     otherYears.remove(coveringDatebyPiece)
                 print(otherYears)
-            '''    
-
+            '''                
+            
             insertCoveringDateValues(currentSpreadsheet, coveringDatesByPieceList)
             print("Adding covering dates for " + os.path.basename(file))
-            
 
             openingList = createOpeningList(ageList, coveringDatesByPieceList)
             altOpeningList = createOpeningList(ageList, yearList)
@@ -366,11 +390,17 @@ def generateFiles(coveringDateFile='',reset=True,output=True,summary=True):
                 print(os.path.basename(file) + " redacted. Spreadsheets with redacted descriptions and unredactions generated.")
             else:
                 path = pathToFile(date.today().year)
+                spreadsheetNoRedactions(os.path.basename(file), currentSpreadsheet)
+
+                '''
                 filename = os.path.splitext(os.path.basename(file))[0] + '_NoRedactions' + os.path.splitext(os.path.basename(file))[1]
+                
                 try: 
                     shutil.copyfile(file, os.path.join(path, filename))
                 except shutil.SameFileError:
                     pass
+                '''
+
                 print(os.path.basename(file) + " copied over, no redactions needed")
                 
         if summary:   
