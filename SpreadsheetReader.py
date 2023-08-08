@@ -37,7 +37,6 @@ def getCoveringDatesbyPiece(filename):
     
     return coveringDates
 
-
 def removeBlanksFromColumn(column):
     return [value for value in column if value != ""]  
 
@@ -45,7 +44,6 @@ def getAgeFromColumn(column):
     ''' Get age from named column, if no age given then assume age is 18, and return a list of ages '''
     # if value is number then age otherwise default value      
     return [entry if str(entry).strip().isnumeric() else 18 for entry in removeBlanksFromColumn(column)]         
-
 
 def getYearFromColumn(column):
     ''' Get year from named column and return a dictionary of years and covering dates'''
@@ -68,7 +66,6 @@ def getDateFromList(dateList, earliest, latest, default, max=True):
         foundDate = default
         
     return foundDate
-
 
 def codifyYears(yearsList):
     defaultYear = ""
@@ -108,12 +105,10 @@ def codifyYears(yearsList):
     #print(coveringDates)
     return zip(codifiedYears, coveringDates)
              
-
 def insertCoveringDateValues(sheet, dateList):
     ''' Insert covering date values into dictionary of spreadsheet values '''
     sheet["Covering Dates"] = dateList
     return sheet
-
 
 def openingCalculation(age, year):
     ''' return the year the record can be opened (100 years after birth) given an age in a given year'''
@@ -122,17 +117,25 @@ def openingCalculation(age, year):
     else:
         return '?'
 
+def deceasedCheck(openingDate, additionalInfo):
+    ''' return the default year for opening unless the word deceased appears in the additional info '''
+    if "Deceased" in additionalInfo and openingDate > date.today().year:
+        return date.today().year
+    else:
+        return openingDate
 
 def createOpeningList(agesList, yearsList):   
     ''' return a list of years in which the record will be open given a list of ages and list of years'''
     return list(map(openingCalculation, agesList, yearsList))
 
+def unredactIfDeceased(openingList, additionalInfoList):
+    ''' update the opening list to current year if the person is dead'''
+    return list(map(deceasedCheck, openingList, additionalInfoList))
 
 def sheetRedactionNeededCheck(openingList):
     ''' return False if no opening dates in the given list are later than the current year'''
     return False if max(openingList) <= date.today().year else True
-
-        
+       
 def selectByYear(previousRedactionList, currentRedactionList):
     ''' Return filter of changed redaction'''    
     return [False if a == b else True for a, b in zip(previousRedactionList, currentRedactionList)]    
@@ -251,14 +254,12 @@ def spreadsheetNoRedactions(filename, values):
         newFile = os.path.join(path, newFilename)  
         wb.save(newFile)    
 
-
 def generateSpreadsheets(filename, values, newValues, openingList):
     ''' Create the spreadsheets for each year '''
     yearsToPublishList = yearsToPublish(openingList)
     
     for currentYear in yearsToPublishList:
         unredactByYear(filename, values, newValues, currentYear)
-
 
 def generateSummary(filename, ageList, coveringDatesList, openingList, altOpeningList):
     ''' print out a summary spreadsheet, including covering dates comparison outcome, with information about each piece on a seperate tab '''
@@ -288,11 +289,11 @@ def generateSummary(filename, ageList, coveringDatesList, openingList, altOpenin
             if altOpening != '?' and altOpening <= 2023 and opening <= 2023:
                 ws.cell(row, 5, "Difference in opening date irrelevant because both before 2023")
             elif altOpening != '?' and altOpening < opening:
-                ws.cell(row, 5, "Date in description earlier than supplied covering date. Alternate opening would be " + str(altOpening))
+                ws.cell(row, 5, "Date in description earlier than supplied covering date. Earlier date of " + str(altOpening) + " used.")
                 if '!' not in ws.title:
                     ws.title += '!'
             elif altOpening != '?' and altOpening > opening:
-                ws.cell(row, 5, "Date in description later than supplied covering date. Alternate opening would be " + str(altOpening))
+                ws.cell(row, 5, "Date in description later than supplied covering date. Later date of " + str(altOpening) + " used. Covering date should be checked!")
                 if '!' not in ws.title:
                     ws.title += '!'
             elif altOpening == '?':
@@ -364,6 +365,11 @@ def generateFiles(coveringDateFile='',reset=True,output=True,summary=True):
 
             openingList = createOpeningList(ageList, coveringDatesByPieceList)
             altOpeningList = createOpeningList(ageList, yearList)
+
+            additionalInfoList = currentSpreadsheet['Additional Information']
+
+            openingList = unredactIfDeceased(openingList, additionalInfoList)
+            altOpeningList = unredactIfDeceased(altOpeningList, additionalInfoList)
 
             '''
             combinedLists = zip(openingList, altOpeningList)
@@ -465,6 +471,13 @@ def test_selectByYear_testFile(selectList, year):
         assert expectedSelectList == selectList
 '''
 
+def test_unredactionDueToDeath():
+    openingList = [date.today().year, date.today().year+1, date.today().year+2, date.today().year+1, date.today().year]
+    additionalInfoList = ["","Random other text","Deceased","Deceased",""]
+
+    assert unredactIfDeceased(openingList, additionalInfoList) == [date.today().year, date.today().year+1, date.today().year, date.today().year, date.today().year]
+    #assert unredactBecauseDeceased(openingList, additionalInfoList) == [date.today().year, date.today().year+1, date.today().year+2, date.today().year+1, date.today().year]
+
 ### Main        
 
 '''
@@ -490,8 +503,10 @@ if(sheetRedactionNeededCheck(openingList)):
     #pp(newColumns)
     
 #generateSpreadsheets("test.xlsx", currentSpreadsheet, newColumns, openingList)
+
+test_unredactionDueToDeath()
 '''
 
-generateFiles('covering_dates.csv')
+#generateFiles('covering_dates.csv')
 
 #test_get_covering_dates(getCoveringDatesbyPiece('covering_dates.csv'))
