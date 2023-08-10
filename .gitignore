@@ -132,3 +132,4 @@ dmypy.json
 .pyre/
 *.code-workspace
 *.zip
+*.xlsx\#
