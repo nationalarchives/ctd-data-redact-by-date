@@ -45,14 +45,14 @@ def getAgeFromColumn(column):
     # if value is number then age otherwise default value      
     return [entry if str(entry).strip().isnumeric() else 18 for entry in removeBlanksFromColumn(column)]         
 
-def getYearFromColumn(column):
+def getYearFromColumn(column, coveringDate):
     ''' Get year from named column and return a dictionary of years and covering dates'''
     # regex for dddd in text value
     # since Python 3.8 := allows you to name an evaluation as a variable which you can use int he list comparhension see https://stackoverflow.com/questions/26672532/how-to-set-local-variable-in-list-comprehension 
     years = [int(years[0]) if len(years := re.findall(r'\d{4}', entry)) == 1 else years for entry in removeBlanksFromColumn(column)] 
     #pp(years)
        
-    return codifyYears(years)
+    return codifyYears(years, coveringDate)
 
 def getDateFromList(dateList, earliest, latest, default, max=True):
     foundDate = -1
@@ -67,8 +67,8 @@ def getDateFromList(dateList, earliest, latest, default, max=True):
         
     return foundDate
 
-def codifyYears(yearsList):
-    defaultYear = ""
+def codifyYears(yearsList, coveringDate=""):
+    defaultYear = coveringDate
     earliest = 1935
     latest = 1946
     codifiedYears = []
@@ -261,7 +261,7 @@ def generateSpreadsheets(filename, values, newValues, openingList):
     for currentYear in yearsToPublishList:
         unredactByYear(filename, values, newValues, currentYear)
 
-def generateSummary(filename, ageList, coveringDatesList, openingList, altOpeningList):
+def generateSummary(filename, ageList, coveringDatesList, openingListByPiece, openingListByExtractedDate, full=False):
     ''' print out a summary spreadsheet, including covering dates comparison outcome, with information about each piece on a seperate tab '''
 
     if os.path.exists(os.path.join('data', 'summary', 'summary.xlsx')):
@@ -281,23 +281,23 @@ def generateSummary(filename, ageList, coveringDatesList, openingList, altOpenin
         row = 2
         ws.cell(1, col, heading).font = Font(bold=True)
         
-        for age, coveringDate, opening, altOpening in zip(ageList, coveringDatesList, openingList, altOpeningList):
+        for age, coveringDate, openingByPiece, openingByExtractedDate in zip(ageList, coveringDatesList, openingListByPiece, openingListByExtractedDate):
             ws.cell(row, 1, row-1)
             ws.cell(row, 2, age)
             ws.cell(row, 3, coveringDate)
-            ws.cell(row, 4, opening)
-            if altOpening != '?' and altOpening <= 2023 and opening <= 2023:
-                ws.cell(row, 5, "Difference in opening date irrelevant because both before 2023")
-            elif altOpening != '?' and altOpening < opening:
-                ws.cell(row, 5, "Date in description earlier than supplied covering date. Earlier date of " + str(altOpening) + " used.")
+            ws.cell(row, 4, openingByExtractedDate)
+            if openingByExtractedDate != '?' and openingByPiece <= date.today().year and openingByExtractedDate <= date.today().year and full:
+                ws.cell(row, 5, "Difference in opening date irrelevant because both before current year")
+            elif openingByExtractedDate != '?' and openingByExtractedDate < openingByPiece and full:
+                ws.cell(row, 5, "Date in description earlier than supplied covering date. Earlier date of " + str(openingByExtractedDate) + " used.")
                 if '!' not in ws.title:
                     ws.title += '!'
-            elif altOpening != '?' and altOpening > opening:
-                ws.cell(row, 5, "Date in description later than supplied covering date. Later date of " + str(altOpening) + " used. Covering date should be checked!")
+            elif openingByExtractedDate != '?' and openingByExtractedDate > openingByPiece:
+                ws.cell(row, 5, "Date in description later than supplied covering date. Later date of " + str(openingByExtractedDate) + " used. Covering date should be checked!")
                 if '!' not in ws.title:
                     ws.title += '!'
-            elif altOpening == '?':
-                ws.cell(row, 5, "No alternative opening date found")
+            elif openingByExtractedDate == '?':
+                ws.cell(row, 5, "No opening date found")
 
             row += 1
             
@@ -336,10 +336,13 @@ def generateFiles(coveringDateFile='',reset=True,output=True,summary=True):
                 #filename = os.path.splitext(os.path.basename(file))[0]
                 piece = os.path.splitext(os.path.basename(file))[0].split('_')[1]
                 getCoveringDatesbyPieceDict = getCoveringDatesbyPiece(coveringDateFile)
+
+                coveringDatebyPiece = ""
                 if len(getCoveringDatesbyPieceDict) > 0:
                     coveringDatebyPiece = getCoveringDatesbyPieceDict[int(piece)]
+
         
-            dates = getYearFromColumn(currentSpreadsheet['Brief summary of grounds for recommendation'])        
+            dates = getYearFromColumn(currentSpreadsheet['Brief summary of grounds for recommendation'], coveringDatebyPiece)        
                 
             yearList = []
             coveringDatesList = []
@@ -363,13 +366,15 @@ def generateFiles(coveringDateFile='',reset=True,output=True,summary=True):
             insertCoveringDateValues(currentSpreadsheet, coveringDatesByPieceList)
             print("Adding covering dates for " + os.path.basename(file))
 
-            openingList = createOpeningList(ageList, coveringDatesByPieceList)
-            altOpeningList = createOpeningList(ageList, yearList)
+            originalOpeningListByPiece = createOpeningList(ageList, coveringDatesByPieceList)
+            originalOpeningListByExtractedDate = createOpeningList(ageList, yearList)
 
             additionalInfoList = currentSpreadsheet['Additional Information']
 
-            openingList = unredactIfDeceased(openingList, additionalInfoList)
-            altOpeningList = unredactIfDeceased(altOpeningList, additionalInfoList)
+            openingListByPiece = unredactIfDeceased(originalOpeningListByPiece, additionalInfoList)
+            openingListByExtractedDate = unredactIfDeceased(originalOpeningListByExtractedDate, additionalInfoList)
+
+            test_unredactionDueToDeath(originalOpeningListByExtractedDate, openingListByExtractedDate, additionalInfoList)
 
             '''
             combinedLists = zip(openingList, altOpeningList)
@@ -381,7 +386,7 @@ def generateFiles(coveringDateFile='',reset=True,output=True,summary=True):
                 row += 1
             '''
 
-            test_all_ints(openingList)
+            test_all_ints(openingListByExtractedDate)
             
         except AssertionError as e:
             print("Issue with " + os.path.basename(file) + "skipping")
@@ -390,9 +395,9 @@ def generateFiles(coveringDateFile='',reset=True,output=True,summary=True):
         
     
         if output:
-            if(sheetRedactionNeededCheck(openingList)):
-                newColumnValues = redactColumns(dict((key, currentSpreadsheet[key]) for key in ['Occupation', 'Brief summary of grounds for recommendation']), openingList, 1946)
-                generateSpreadsheets(os.path.basename(file), currentSpreadsheet, newColumnValues, openingList)
+            if(sheetRedactionNeededCheck(openingListByExtractedDate)):
+                newColumnValues = redactColumns(dict((key, currentSpreadsheet[key]) for key in ['Occupation', 'Brief summary of grounds for recommendation']), openingListByExtractedDate, 1946)
+                generateSpreadsheets(os.path.basename(file), currentSpreadsheet, newColumnValues, openingListByExtractedDate)
                 print(os.path.basename(file) + " redacted. Spreadsheets with redacted descriptions and unredactions generated.")
             else:
                 path = pathToFile(date.today().year)
@@ -410,7 +415,7 @@ def generateFiles(coveringDateFile='',reset=True,output=True,summary=True):
                 print(os.path.basename(file) + " copied over, no redactions needed")
                 
         if summary:   
-            generateSummary(os.path.splitext(os.path.basename(file))[0], ageList, coveringDatesByPieceList, openingList, altOpeningList)   
+            generateSummary(os.path.splitext(os.path.basename(file))[0], ageList, coveringDatesByPieceList, openingListByPiece, openingListByExtractedDate)   
             
 
       
@@ -478,6 +483,18 @@ def test_unredactionDueToDeath():
     assert unredactIfDeceased(openingList, additionalInfoList) == [date.today().year, date.today().year+1, date.today().year, date.today().year, date.today().year]
     #assert unredactBecauseDeceased(openingList, additionalInfoList) == [date.today().year, date.today().year+1, date.today().year+2, date.today().year+1, date.today().year]
 
+def test_unredactionDueToDeath(originalList, redactedList, spreadsheetColumn):
+    count = 1
+    for origDate, newDate, notes in zip(originalList, redactedList, spreadsheetColumn):
+        if origDate != newDate:
+            assert 'Deceased' in notes
+            print("Item " + str(count) + ": Record opened because marked as deceased")
+        elif 'Deceased' in notes:
+            assert origDate <= date.today().year and newDate <= date.today().year
+            print("Item " + str(count) + ": Marked as deceased but record already open")
+
+        count+=1
+
 ### Main        
 
 '''
@@ -507,6 +524,6 @@ if(sheetRedactionNeededCheck(openingList)):
 test_unredactionDueToDeath()
 '''
 
-#generateFiles('covering_dates.csv')
+generateFiles('covering_dates.csv', False, False, True)
 
 #test_get_covering_dates(getCoveringDatesbyPiece('covering_dates.csv'))
