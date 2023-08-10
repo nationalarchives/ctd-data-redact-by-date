@@ -251,8 +251,9 @@ def spreadsheetNoRedactions(filename, values):
     if row > 2:   
         path = pathToFile(date.today().year)  
         newFilename = os.path.splitext(os.path.basename(filename))[0] + '_NoRedactions' + os.path.splitext(os.path.basename(filename))[1]
-        newFile = os.path.join(path, newFilename)  
-        wb.save(newFile)    
+        newFileFullPath = os.path.join(path, newFilename)  
+        wb.save(newFileFullPath) 
+        return newFileFullPath 
 
 def generateSpreadsheets(filename, values, newValues, openingList):
     ''' Create the spreadsheets for each year '''
@@ -329,7 +330,7 @@ def generateFiles(coveringDateFile='',reset=True,output=True,summary=True):
         #print(currentSpreadsheet.keys())
         
         try:        
-            #test_loadfile(list(currentSpreadsheet.keys()))
+            test_load_file(list(currentSpreadsheet.keys()))
         
             ageList = getAgeFromColumn(currentSpreadsheet['Age'])
             test_all_ints(ageList)
@@ -376,7 +377,7 @@ def generateFiles(coveringDateFile='',reset=True,output=True,summary=True):
             openingListByPiece = unredactIfDeceased(originalOpeningListByPiece, additionalInfoList)
             openingListByExtractedDate = unredactIfDeceased(originalOpeningListByExtractedDate, additionalInfoList)
 
-            changesToOpening = test_unredactionDueToDeath(originalOpeningListByExtractedDate, openingListByExtractedDate, additionalInfoList)
+            changesToOpening = test_unredaction_due_to_death(originalOpeningListByExtractedDate, openingListByExtractedDate, additionalInfoList)
             #print(changesToOpening)
             '''
             combinedLists = zip(openingList, altOpeningList)
@@ -391,7 +392,7 @@ def generateFiles(coveringDateFile='',reset=True,output=True,summary=True):
             test_all_ints(openingListByExtractedDate)
             
         except AssertionError as e:
-            print("Issue with " + os.path.basename(file) + "skipping")
+            print("Issue with " + os.path.basename(file) + " skipping")
             print(e)
             continue
         
@@ -400,10 +401,14 @@ def generateFiles(coveringDateFile='',reset=True,output=True,summary=True):
             if(sheetRedactionNeededCheck(openingListByExtractedDate)):
                 newColumnValues = redactColumns(dict((key, currentSpreadsheet[key]) for key in ['Occupation', 'Brief summary of grounds for recommendation']), openingListByExtractedDate, 1946)
                 generateSpreadsheets(os.path.basename(file), currentSpreadsheet, newColumnValues, openingListByExtractedDate)
+                
+                newFilename = os.path.splitext(os.path.basename(file))[0] + "_" + str(date.today().year) + os.path.splitext(os.path.basename(file))[1]
+                pathToNewFile = os.path.join(pathToFile(date.today().year), newFilename)
+
                 print(os.path.basename(file) + " redacted. Spreadsheets with redacted descriptions and unredactions generated.")
             else:
                 path = pathToFile(date.today().year)
-                spreadsheetNoRedactions(os.path.basename(file), currentSpreadsheet)
+                pathToNewFile = spreadsheetNoRedactions(os.path.basename(file), currentSpreadsheet)
 
                 '''
                 filename = os.path.splitext(os.path.basename(file))[0] + '_NoRedactions' + os.path.splitext(os.path.basename(file))[1]
@@ -415,7 +420,10 @@ def generateFiles(coveringDateFile='',reset=True,output=True,summary=True):
                 '''
 
                 print(os.path.basename(file) + " copied over, no redactions needed")
-                
+
+            test_load_file_row_count(removeBlanksFromColumn(currentSpreadsheet['Item']), pathToNewFile)
+
+
         if summary:   
             generateSummary(os.path.splitext(os.path.basename(file))[0], ageList, coveringDatesByPieceList, openingListByPiece, openingListByExtractedDate, changesToOpening)   
             
@@ -426,15 +434,45 @@ def generateFiles(coveringDateFile='',reset=True,output=True,summary=True):
 ### Tests ####
 
 
-def test_loadfile(columnHeadings):
-    expectedColumns = ['Letter','Series','Piece', 'Item', 'Treasury Case number', 'Home Office case number', 'First names/Initials', 'Surname', 'Age', 'Occupation', 'Award granted', 'Brief summary of grounds for recommendation']   
-    assert columnHeadings == expectedColumns, "Error in expected columns: " + str(columnHeadings)  
-       
+def test_load_file(columnHeadings):
+    expectedColumns = ['Letter','Series','Piece', 'Item', 'Treasury case number', 'Home Office case number', 'First names/Initials', 'Surname', 'Age', 'Occupation', 'Award granted', 'Brief summary of grounds for recommendation', 'Additional Information']   
+    assert columnHeadings == expectedColumns, "Error in expected columns. Check for " + str([i for i in expectedColumns + columnHeadings if i not in expectedColumns or i not in columnHeadings])  
+
+def test_load_generated_file(columnHeadings):
+    expectedColumns = ['Letter','Series','Piece', 'Item', 'Treasury case number', 'Home Office case number', 'First names/Initials', 'Surname', 'Age', 'Occupation', 'Award granted', 'Brief summary of grounds for recommendation', 'Additional Information', 'Covering Dates']   
+    assert columnHeadings == expectedColumns, "Error in expected columns. Check for " + str([i for i in expectedColumns + columnHeadings if i not in expectedColumns or i not in columnHeadings])  
+
+def test_load_file_row_count(item_column_on_load, newFile):
+    newSpreadsheet = getSpreadsheetValues(newFile)
+    test_load_generated_file(list(newSpreadsheet.keys()))
+    assert all(item in item_column_on_load for item in removeBlanksFromColumn(newSpreadsheet['Item'])), "Error in expected output. Missing items: " + str([i for i in item_column_on_load if i not in newSpreadsheet['Item']])  
+
 def test_all_ints(list):
     assert all(isinstance(x, int) for x in list), "Error in expected data types: " + str(list)
 
 def test_get_covering_dates(coveringDateList):
     assert coveringDateList[2] == 1940, "Error in returned value: expected 1940 got " + coveringDateList[2]
+
+def test_unredaction_due_to_death():
+    openingList = [date.today().year, date.today().year+1, date.today().year+2, date.today().year+1, date.today().year]
+    additionalInfoList = ["","Random other text","Deceased","Deceased",""]
+
+    assert unredactIfDeceased(openingList, additionalInfoList) == [date.today().year, date.today().year+1, date.today().year, date.today().year, date.today().year]
+    #assert unredactBecauseDeceased(openingList, additionalInfoList) == [date.today().year, date.today().year+1, date.today().year+2, date.today().year+1, date.today().year]
+
+def test_unredaction_due_to_death(originalList, redactedList, spreadsheetColumn):
+    changesToOpening = []
+    for origDate, newDate, notes in zip(originalList, redactedList, spreadsheetColumn):
+        if origDate != newDate:
+            assert 'Deceased' in notes, "Error in opening date: A change has been made to the opening date but 'Deceased' not detected in Additional Notes"
+            changesToOpening.append("Record opened because marked as deceased")
+        elif 'Deceased' in notes:
+            assert origDate <= date.today().year and newDate <= date.today().year, "Error in opening date: 'Deceased' detected in Additional Notes but opening date not set to current year"
+            changesToOpening.append("Marked as deceased but record already open")
+        else:
+            changesToOpening.append("")
+    
+    return changesToOpening
 
 '''    
 def test_age_testFile(ageList):
@@ -478,26 +516,7 @@ def test_selectByYear_testFile(selectList, year):
         assert expectedSelectList == selectList
 '''
 
-def test_unredactionDueToDeath():
-    openingList = [date.today().year, date.today().year+1, date.today().year+2, date.today().year+1, date.today().year]
-    additionalInfoList = ["","Random other text","Deceased","Deceased",""]
 
-    assert unredactIfDeceased(openingList, additionalInfoList) == [date.today().year, date.today().year+1, date.today().year, date.today().year, date.today().year]
-    #assert unredactBecauseDeceased(openingList, additionalInfoList) == [date.today().year, date.today().year+1, date.today().year+2, date.today().year+1, date.today().year]
-
-def test_unredactionDueToDeath(originalList, redactedList, spreadsheetColumn):
-    changesToOpening = []
-    for origDate, newDate, notes in zip(originalList, redactedList, spreadsheetColumn):
-        if origDate != newDate:
-            assert 'Deceased' in notes
-            changesToOpening.append("Record opened because marked as deceased")
-        elif 'Deceased' in notes:
-            assert origDate <= date.today().year and newDate <= date.today().year
-            changesToOpening.append("Marked as deceased but record already open")
-        else:
-            changesToOpening.append("")
-    
-    return changesToOpening
         
 
 ### Main        
@@ -529,6 +548,6 @@ if(sheetRedactionNeededCheck(openingList)):
 test_unredactionDueToDeath()
 '''
 
-generateFiles('covering_dates.csv', False, False, True)
+generateFiles('covering_dates.csv')
 
 #test_get_covering_dates(getCoveringDatesbyPiece('covering_dates.csv'))
